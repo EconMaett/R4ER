@@ -1,7 +1,6 @@
 # R for Economic Research
 
-<!-- badges: start -->
-<!-- badges: end -->
+This repository follows the book [R for Economic Research](https://book.rleripio.com/) by J. Renato Leripio.
 
-Essential tools for modern economic analysis by J. Renato Leripio.
+
 
