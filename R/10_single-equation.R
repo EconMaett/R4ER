@@ -1,4 +1,7 @@
 # 10 - Single equation models ----
+# URL: https://book.rleripio.com/single_equation
+library(tidyverse)
+library(broom)
 
 # A fundamental part of economic research is estimate the 
 # relationship between variables.
@@ -51,7 +54,6 @@
 # on the book's GitHub page, and visualizing the variables
 # of interest.
 
-library(tidyverse)
 
 cp_data <- readRDS(file = "data/ch12_cp_data.rds")
 
@@ -155,7 +157,6 @@ summary(cp_fit)$coefficients["dlog_CI_USD", "Estimate"] * 10
 
 # The `broom` R package from the `tidymodels` family of packages
 # provides other handy functions to manipulate regression results.
-library(broom)
 
 cp_fit |> 
   broom::augment()

@@ -1,190 +1,103 @@
 # 04 - Seasonal adjustment ----
+# URL: https://book.rleripio.com/ds_seasonality
+library(tidyverse)
+library(sidrar)
+library(seasonal)
+library(forecast)
+fig_path <- "figures/"
+Sys.setlocale("LC_TIME", "English")
+# Seasonality means expected (deterministic) fluctuations in time series 
+# that occur within a regular frequency, usually not exceeding a one-year period.
 
-# Seasonalities are expected (deterministic) fluctuations
-# in time series that occur within a regular frequency,
-# usually not exceeding a one-year period.
+# Fluctuations that are larger than one year are sometimes refereed to as 
+# a *cycle* and combined  in the trend-cycle component of a time series.
 
-# Fluctuations that are larger than one year are
-# sometimes refereed to as a *cycle* and combined 
-# in the trend-cycle component of a time series.
-
-# Seasonal fluctuations make it difficult to identify
-# trends in time series.
-
-# Before analyzing a time series, it is recommended
-# to remove seasonal components.
-
+# Seasonal fluctuations make it difficult to identify trends in time series.
+# Before analyzing a time series, it is recommended to remove seasonal components.
 
 # There are multiple methods available for seasonal adjustment,
 # such as the U.S. Census Bureau's X-13-ARIMA program.
 
 # It makes use of a standard ARIMA model with external regressors,
-# accounting for outliers, permanent or transitory shifts,
-# holiday effects, etc.
+# accounting for outliers, permanent or transitory shifts, holiday effects, etc.
 
 # The Census Bureau's Q&A section of its website on Seasonal Adjustment
-# provides helpful information.
+# provides helpful information: https://www.census.gov/data/software/x13as/seasonal-adjustment-questions-answers.html
 
-# See more: https://www.census.gov/data/software/x13as/seasonal-adjustment-questions-answers.html
-
-# We will try to identify and remove the seasonal pattern from 
-# the Brazilian Retail Sales data (PMC provided by IBGE,
-# the Brazilian official bureau of statistics) using 
-# X-13-ARIMA.
-
+# Identify and remove the seasonal pattern from the Brazilian Retail Sales 
+# data (PMC provided by IBGE, the Brazilian official bureau of statistics) using X-13-ARIMA.
 
 ### 4.0.1 Spotting a seasonal pattern ----
-
 # It is common for time series to exhibit a seasonal pattern
 # that is strong enough to be visible by simple visual inspection.
-
-
-# The data are available here:
-# https://sidra.ibge.gov.br/tabela/8880
-
-# Website of the monthly commercial survey of Brazil
-# Psesquisa Mensual de Comercio (PMC)
-# https://sidra.ibge.gov.br/home/pmc/brasil
-
-# We use the `sidrar` R package to access the IBGE data
-# CRAN: https://cran.r-project.org/package=sidrar
-# GitHub: https://github.com/rpradosiqueira
-# Vignette: https://cran.r-project.org/web/packages/sidrar/vignettes/Introduction_to_sidrar.html
-
-# install.packages("sidrar")
-library(sidrar)
-
-info_sidra(x = 8880, wb = TRUE)
-# Opens https://apisidra.ibge.gov.br/desctabapi.aspx?c=8880
-
-
-# table number: 8880
-
-# Variables:
-# Index: 7169
-# Seasonally adjusted index: 7170
-
-# Nominal sales revenue index: 56733
-# Sales volume index: 56734
-
-pmc_ts_nsa <- get_sidra(
-  x = 8880, 
-  variable = 7169, 
-  classific = "C11046",
-  category = list(56734),
-  period = c(last = 12*24)
-)
-
-View(pmc_ts_nsa)
-
-# Note that 2020 = 100
-pmc_ts_nsa <- pmc_ts_nsa |> 
-  as_tibble() |> 
-  select(`Mês (Código)`, Valor) |> 
-  set_names(c("date", "value")) |> 
-  mutate(
-    year = str_sub(date, end = 4),
-    month = str_sub(date, start = 5),
-    date = make_date(
-      year = year,
-      month = month,
-      day = 1
-    ),
-    date2 = make_date(
-      year = year,
-      month = month,
-      day = days_in_month(date)
-    )
-  ) |> 
-  mutate(
-    date = date2,
-    value = as.numeric(value),
-    .keep = "used"
-  ) |> 
-  select(date, value)
-
-print(pmc_ts_nsa)
+pmc_ts_nsa <- read_csv(file = "data/pmc_ts_nsa.csv")
 
 pmc_ts_nsa |> 
   ggplot(mapping = aes(x = date, y = value)) +
-  geom_line(lwd = 2) +
+  geom_line(lwd = 1.2) +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
   labs(
     title = "Retail sales in Brazil - Volume index (2022 = 100)",
-    y = "Index (2022 = 100)",
-    x = ""
+    x = NULL, y = NULL
   ) +
   theme_light()
 
-ggsave(filename = "04_br-retail-sales-raw.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-raw.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-# A mix of trends and random noise may hinder our ability to spot
-# the seasonal pattern.
+# A mix of trends and random noise may hinder our ability to spot the seasonal pattern.
 
-# We use the `forecast::ggmonthplot()` function to build a plot
+# Use`forecast::ggmonthplot()` function to build a plot
 # where the data are grouped by period so we get a sense
 # of which values are typical for which period.
 
 # Note that the `forecast` package works with the "ts" class
 # of time series objects.
-
-library(forecast)
-
 pmc_ts_nsa <- ts(data = pmc_ts_nsa$value, start = c(2000, 1, 1), frequency = 12)
 
 pmc_ts_nsa |> 
-  ggmonthplot(lwd = 2) +
+  ggmonthplot(lwd = 1.2) +
   labs(
     title = "Retail sales in Brazil - Volume Index (2022 = 100)",
-    x = "",
-    y = "Index (2022 = 100)"
+    x = NULL, y = NULL
   ) +
   theme_light()
 
-ggsave(filename = "04_br-retail-sales-monthplot.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-monthplot.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-
 # The graph conveys that retail sales are usually higher
-# in December than in other months.
-# This is related to year-end sales.
-
+# in December than in other months. This is related to year-end sales.
 
 ### 4.0.2 Removing the seasonal pattern ----
-
 # We use the `seasonal` R package to access the X-13-ARIMA
 # software through the `seas()` function.
 
-# The function will automatically select the model that
-# fits the data best.
+# The function will automatically select the model that fits the data best.
 
-# The `seas()` function returns the model selected for seasonal
-# adjustment.
-library(seasonal)
-
+# The `seas()` function returns the model selected for seasonal adjustment.
 pmc_sa_autox13 <- seas(pmc_ts_nsa)
 
-# We access the seasonally adjusted series with the
-# `final()` function.
-
+# We access the seasonally adjusted series with the `final()` function.
 pmc_sa_autox13 |> 
   final() |> 
-  autoplot() +
-  autolayer(object = pmc_ts_nsa, series = "Retail NSA") +
+  autoplot(lwd = 1.2) +
+  autolayer(object = pmc_ts_nsa, series = "Retail NSA", lwd = 1.2) +
   labs(
     title = "Retail sales in Brazil - Volume index (2022 = 100)",
     subtitle = "Seasonally-adjusted",
-    x = "",
-    y = "Index (2022 = 100)"
+    x = NULL, y = NULL
   ) +
-  theme_light()
+  theme_light() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank()
+  )
 
-ggsave(filename = "04_br-retail-sales-adjusted.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-adjusted.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-# We can use the `ggmonthplot()` function from the `forecast`
-# package to see if the adjustment removed all seasonal variation:
+# Use `forecast::ggmonthplot()` to see if the adjustment removed all seasonal variation:
 pmc_sa_autox13 |> 
   final() |> 
   ggmonthplot() +
@@ -196,22 +109,18 @@ pmc_sa_autox13 |>
   ) +
   theme_light()
 
-ggsave(filename = "04_br-retail-sales-adjusted-monthplot.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-adjusted-monthplot.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-
-# This looks appropriate.
 # We can assess relevant information about the model selected
-# by `seasonal::seas()` using standard methods for linear
-# model objects (`lm`).
+# by `seasonal::seas()` using linear model objects (`lm`).
 
 # For example, information on the estimated parameters are
-# availalbe through the `summary()` function,
+# available through the `summary()` function,
 # while the `checkresiduals()` function from the `forecast`
 # package can be used to check the properties of the residuals
 # (or direclty perform any test based on model residuals) 
 # using the `residuals()` function.
-
 pmc_sa_autox13 |> 
   summary()
 # We see significant effects for Saturday,
@@ -220,85 +129,48 @@ pmc_sa_autox13 |>
 # Check the residuals
 pmc_sa_autox13 |> 
   forecast::checkresiduals()
-ggsave(filename = "04_br-retail-sales-adjusted-residuals.png", path = "figures/", height = 4, width = 8)
+
+ggsave(filename = "04_br-retail-sales-adjusted-residuals.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-
 ### 4.0.3 Moving to a custom specification ----
-
 # Sometimes we don't want to rely on the automatic selection
 # models, because we would like to include special
 # moving holidays, such as Black Friday, or Super Bowl Sunday,
 # or because we want to replicate the official seasonal adjustment
 # process used by a third party.
-
-# For instance, IBGE releases its own seasonally-adjusted
-# retail sales data.
-
-# table number: 8880
-# Variables:
-# Index: 7169
-# Seasonally adjusted index: 7170
-# Nominal sales revenue index: 56733
-# Sales volume index: 56734
-
-pmc_ts_sa <- get_sidra(
-  x = 8880, 
-  variable = 7170, 
-  classific = "C11046",
-  category = list(56734),
-  period = c(last = 12*24)
-)
-
-View(pmc_ts_sa)
-
-# Note that 2020 = 100
-pmc_ts_sa <- pmc_ts_sa |> 
-  as_tibble() |> 
-  select(`Mês (Código)`, Valor) |> 
-  set_names(c("date", "value")) |> 
-  mutate(
-    year = str_sub(date, end = 4),
-    month = str_sub(date, start = 5),
-    date = make_date(
-      year = year,
-      month = month,
-      day = 1
-    ),
-    date2 = make_date(
-      year = year,
-      month = month,
-      day = days_in_month(date)
-    )
-  ) |> 
-  mutate(
-    date = date2,
-    value = as.numeric(value),
-    .keep = "used"
-  ) |> 
-  select(date, value)
+pmc_ts_sa <- read_csv(file = "data/pmc_ts_sa.csv")
 
 print(pmc_ts_sa)
 
-
-
+# Plot the time series
 pmc_ts_sa |> 
   rename(off_value = value) |> 
   bind_cols(tsbox::ts_df(final(pmc_sa_autox13)) |> rename(adj_value = value)) |> 
   select(date, off_value, adj_value) |> 
   pivot_longer(cols = -c("date"), names_to = "index", values_to = "value") |> 
+  mutate(
+    index = case_when(
+      index == "off_value" ~ "unadjusted",
+      index == "adj_value" ~ "adjusted"
+    ),
+    index = factor(index, levels = c("adjusted", "unadjusted"))
+  ) |> 
   ggplot(mapping = aes(x = date, y = value, color = index)) +
-  geom_line(lwd = 2) +
+  geom_line(lwd = 1.2) +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_color_manual(values = c("firebrick", "black")) +
   labs(
     title = "Retail sales in Brazil - Volume index (2022 = 100)",
-    subtitle = "Seasonally-adjusted",
-    y = "Index (2022 = 100)",
-    x = ""
+    x = NULL, y = NULL
   ) +
-  theme_light()
+  theme_light() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank()
+  )
 
-ggsave(filename = "04_br-retail-sales-official-unofficial.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-official-unofficial.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
 # We see that the automatically adjusted series follows the official one
@@ -322,7 +194,7 @@ graphics.off()
 # is the classic *Airline Model*.
 # It can be specified inside `seasonal::seas()`.
 # See more: http://www.seasonal.website/
-# This model is ussually used to de-seasonalize retail sales.
+# This model is usually used to de-seasonalize retail sales.
 
 # The Easter regressor is also included inside X13.
 # However, for the holidays that are specific to Brazil,
@@ -364,31 +236,26 @@ graphics.off()
 
 # We specify the seasonal adjustment for the monthly survey
 # or Brazilian retail sales volume according to IBGE's specification:
-library(tidyverse)
-library(seasonal)
 
 # We use the built-in data set of Easter dates
 print(seasonal::easter)
 
-
 # The `lubridate` shortcuts to add dates `%m+%` and `%m-%` come in handy.
 
 # Brazilian carnival is celebrated 47 days BEFORE Easter.
-carnival <- easter %m-% days(47)
+carnival <- seasonal::easter %m-% days(47)
 
 print(carnival)
 
 # Corpus Christi is celebrated 60 days AFTER Easter.
-corpus_christi <- easter %m+% days(60)
+corpus_christi <- seasonal::easter %m+% days(60)
 
 print(corpus_christi)
-
 
 # Use `seasonal::genhol()` to generate holiday regressors
 # by specifying the offset arguments `start` and `end`.
 
-# Carnival celebrations start a day before and end a day
-# after the actual holiday.
+# Carnival celebrations start a day before and end a day after the actual holiday.
 carnival_holiday <- genhol(
   x = carnival,
   start = -1,
@@ -398,7 +265,6 @@ carnival_holiday <- genhol(
 )
 
 print(carnival_holiday)
-
 
 # For Corpus Christi we specify only one holiday.
 corpus_christi_holiday <- genhol(
@@ -410,12 +276,10 @@ corpus_christi_holiday <- genhol(
 print(corpus_christi_holiday)
 
 # Centering avoids bias in the resulting series.
-# Use "calendar" for Easter and Chinese New Year
-# "mean" for Ramadan.
+# Use "calendar" for Easter and Chinese New Year "mean" for Ramadan.
 # See references: Notes on centering holiday.
 
-
-# Then we fit the model to the unadjusted data "pmc_ts_nsa"
+# Then we fit the model to the un-adjusted data "pmc_ts_nsa"
 # as an object of class "ts" (time series).
 
 # The model spcification is the following:
@@ -433,11 +297,8 @@ print(corpus_christi_holiday)
 # the classical Airline Model (with log-adjustment).
 
 # We use X-13 and not SEATS.
-
 pmc_sa_customx13 <- seas(
-  
   x = ts(data = pmc_ts_sa$value, start = c(2000, 1, 1), frequency = 12),
-  
   regression.variables = c(
     "td",
     "easter[1]",
@@ -445,7 +306,6 @@ pmc_sa_customx13 <- seas(
     "tc2020.apr",
     "ls2020.dec"
   ),
-  
   xreg = ts.union(carnival_holiday, corpus_christi_holiday),
   regression.usertype = "holiday",
   arima.model = "(0 1 1)(0 1 1)",
@@ -455,38 +315,37 @@ pmc_sa_customx13 <- seas(
   x11 = ""
 )
 
-# Note the use of `stats::ts.union()` to 
+# Note the use of `stats::ts.union()` 
 head(ts.union(carnival_holiday, corpus_christi_holiday))
-
 
 # Now we can plot the official seasonal adjustment together
 # with our implementation of the same procedure.
-
 pmc_sa_customx13 |> 
   final() |> 
-  autoplot() +
+  autoplot(lwd = 1.2) +
   autolayer(
     object = ts(data = pmc_ts_sa$value, start = c(2000, 1, 1), frequency = 12), 
-    series = "Retail SA (official)"
+    series = "Retail SA (official)",
+    lwd = 1.2
     ) +
   labs(
     title = "Retail sales in Brazil - Volume index (2022 = 100)",
     subtitle = "Seasonally-adjusted",
-    x = "",
-    y = "Index (2022 = 100)"
+    x = NULL, y = NULL
   ) +
-  theme_light()
+  theme_light() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank()
+  )
 
-ggsave(filename = "04_br-retail-sales-official-emulation.png", path = "figures/", height = 4, width = 8)
+ggsave(filename = "04_br-retail-sales-official-emulation.png", path = fig_path, height = 6, width = 10, bg = "white")
 graphics.off()
 
-
-# The new specification produces an almost perfect match
-# with he official seasonally-adjusted data, especially
-# for the post-COVID period.
+# The new specification produces an almost perfect match with he official 
+# seasonally-adjusted data, especially for the post-COVID period.
 
 # Some deviations are arguably due to slight differences
-# in the holiday vector, but for now we consider our goal 
-# achieved.
+# in the holiday vector, but for now we consider our goal achieved.
 
 # END

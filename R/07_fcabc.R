@@ -1,5 +1,13 @@
 # 7 Forecasting - the abc ----
-
+# URL: https://book.rleripio.com/fc_abc
+library(tidyverse)
+library(forecast)
+library(rbcb)
+library(rsample)
+library(timetk)
+library(ggtext)
+fig_path <- "figures/"
+Sys.setlocale("LC_TIME", "English")
 # In recent years, forecasting has been widely associated
 # with Machine Learning methods such as XGBoost,
 # LSTM, Random Forests, and Neural Networks.
@@ -32,13 +40,11 @@
 
 
 ## 7.1 Step 1 - Observe the time series features ----
-
 # Time series forecasting is about extrapolating patterns.
 
 # Note that any forecasting method assumes either the underlying
 # pattern in the data to continue in the future or 
 # the association between two time series to hold in the future.
-
 
 # For univariate time series forecasting, we need to investigate
 # the features of the time series first.
@@ -55,9 +61,6 @@
 # Then we will plot the series with the `autoplot()` function
 # from the `forecast` R package.
 # Note that it is based on the `ggplot2::ggplot()` function.
-library(tidyverse)
-library(forecast)
-library(rbcb)
 
 # Use `rbcb::get_series()` to access the CPI series
 cpi_br <- rbcb::get_series(
@@ -89,11 +92,9 @@ graphics.off()
 # hit the economy, when inflation started to increase to
 # values close to around 1% month-on-month.
 
-
 # The function `forecast::mstl()` will decompose a time
 # series into trend, seasonal and remainder terms using
 # loess, with multiple seasonal periods being allowed.
-
 head(mstl(cpi_br))
 # MM YYYY Data Trend Seasonal12 Remainder
 
@@ -120,9 +121,7 @@ graphics.off()
 # we should opt for one with a flexible approach to
 # trend and seasonality, to take the changing patterns into accoutn.
 
-
 ## 7.2 Step 2 - Split the sample ----
-
 # We need to split the sample into training and testing sets
 # to evaluate our forecasting model.
 
@@ -142,14 +141,12 @@ graphics.off()
 # to provide a representative set of pseudo out-of-sample forecasts
 # that allow us to assess the accuracy of our model.
 
-
 # Note that the structural changes we saw in the previous plot
 # have important implications for the choice of the split scheme.
 
 # The new seasonal pattern after 2016 comprises about
 # 40% of the sample, and the post-Covid upwards trend
 # is present in about 15% of the data.
-
 
 # We make the choice of taking the sample as of 2016
 # and using the *leave-one-out* approach starting
@@ -161,7 +158,6 @@ graphics.off()
 
 # To learn more, consult this article on the `tidymodels`
 # homepage: https://www.tidymodels.org/learn/models/time-series/
-
 
 # The `rsample::rolling_origin()` function provides
 # a convenient object where in each *slice* we have two
@@ -178,28 +174,18 @@ graphics.off()
 # the previous training data as we incorporate new data
 # (the training data will increase over time).
 # We have an *expanding-window* sample.
-library(rsample)
-library(timetk)
 
-# Exclude data before January 2016 to only incorporate
-# the new CPI pattern.
+# Exclude data before January 2016 to only incorporate the new CPI pattern.
 
 # Coerce a time series `ts` class object to a `tibble` object
 # with `timetk::tk_tbl()`
 
 # Note that for the date class "yearmon" it is important
 # to change your language settings to English!
-Sys.setlocale("LC_TIME", "English")
-
 cpi_df <- tk_tbl(cpi_br, rename_index = "date") |> 
   filter(date >= "Jan 2016")
 
 print(cpi_df)
-# A tibble: 80 x 2
-# date        value
-# <yearmon>   <dbl>
-# Mon YYYY    x.xx
-
 # Use `rsample::rolling_origin()` to create subsamples
 # with an expanding window.
 
@@ -245,13 +231,11 @@ tail(cpi_split)
 # The first split contains the data from January 2016 through
 # December 2018 and will evaluate on January 2019.
 
-
 class(cpi_split)
 # "rolling_origin" "rset" "tbl_df" "tbl" "data.frame"
 
 
 ## 7.3 Step 3 - Choose the model ----
-
 # For now we restrict ourselves to uni-variate models, i.e.,
 # we will not employ any explanatory variables.
 
@@ -263,16 +247,13 @@ class(cpi_split)
 # **M Competition**
 # See more at: https://en.wikipedia.org/wiki/Makridakis_Competitions
 
-
 # The TBATS model is usually the first approach whenever
 # we have to predict data with high frequencies (daily or higher)
 # since it can handle multiple seasonal patterns.
 
-
 # The ARIMA model is useful for stationary data,
 # especially when the ACF/PACF plots show a well-defined
 # auto-correlation structure.
-
 
 # Note that in practice, statistical assumptions are often overlooked
 # as the goal is to crate accurate predictions and not to make inference.
@@ -288,7 +269,6 @@ class(cpi_split)
 # evolves at a constant pace, which makes ARIMA a good candidate
 # model as well.
 
-
 # Furthermore, we have downloaded the non-seasonally-adjusted
 # CPI time series from the Brazilian Central Bank.
 
@@ -298,12 +278,10 @@ class(cpi_split)
 # We need to successfully capture the seasonality in the data
 # to create successful forecasts.
 
-
 # One reason why forecast combinations often create superior
 # results is that often one model effectively captures the trend
 # in the data, while another successfully captures the
 # seasonality.
-
 
 # For all these reasons, we apply three models to our pseudo-
 # leave-one-out forecasting exercise:
@@ -446,27 +424,21 @@ graphics.off()
 # Furthermore, the symmetry means we don't care if we over-
 # or under-predict CPI.
 
-
 # If you forecast electricity demand you may not want to
 # be surprised by larger demand than predicted.
 
-
 # We propose two accuracy metrics that are slight modifications
 # of the well known mean absolute error (MAE).
-
 
 # The first, `accuracy_1` assigns twice the weight to upside
 # errors (predictions below actual values), whereas 
 # the second, `accuracy_2`, assigns (linearly) decreasing
 # weights to errors that are further in the past.
-
-
 accuracy_1 <- function(e) {
   .abs_weighted_errors <- ifelse(test = e > 0, yes = 2 * e, no = abs(e))
   .mean_abs_weighted_errors <- mean(.abs_weighted_errors)
   return(.mean_abs_weighted_errors)
 }
-
 
 accuracy_2 <- function(e) {
   .abs_errors <- abs(e)
@@ -476,17 +448,13 @@ accuracy_2 <- function(e) {
   return(.mean_abs_weighted_errors)
 }
 
-
 # We plot the `accuracy_1` function along with the original 
-# MAE function to give you a sense of what is happening behind
-# the scenes.
+# MAE function to give you a sense of what is happening behind the scenes.
 
 # For negative errors (realized value below the prediction)
 # the weights are the same as in the original MAE,
 # while it is somewhat higher for positive errors
 # (realized value above the prediction).
-library(ggtext)
-
 acc_demo <- tibble(
   x = seq(from = -2, to = 2, by = 0.01)
   ) |> 
@@ -518,12 +486,9 @@ acc_demo |>
 ggsave(filename = "07_error-functions.png", path = "figures/", height = 4, width = 8)
 graphics.off()
 
-
 # We are ready to apply our custom functions plus the
 # MAE to the errors we computed from the three models
-# in order to decide which model we want to apply
-# to the real data.
-
+# in order to decide which model we want to apply to the real data.
 cpi_errors <- cpi_fc |> 
   filter(date >= "Jan 2019") |> 
   mutate(across(

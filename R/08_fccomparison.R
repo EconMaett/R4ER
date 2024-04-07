@@ -1,5 +1,13 @@
 # 08 - Forecasting by comparison ----
-
+# URL: https://book.rleripio.com/fc_comparison
+library(tidyverse)
+library(ggtext)
+library(gghighlight)
+library(ggrepel)
+library(jtools)
+library(huxtable)
+fig_path <- "figures/"
+Sys.setlocale("LC_TIME", "English")
 # Forecasting is the task of extrapolating historical patterns
 # of a given process in order to infer a plausible range
 # where future values should lie.
@@ -37,8 +45,7 @@
 
 
 # Get the data for the regression
-library(tidyverse)
-library(ggtext)
+
 
 # Note: The data set is on the book's GitHub repository
 covid_data <- readRDS(file = "data/ch07_covid_data.rds")
@@ -59,8 +66,7 @@ head(covid_data_aux)
 
 
 # Plot the data
-library(gghighlight)
-library(ggrepel)
+
 
 # We need to remove some countreis
 countries_out <- c("Qatar", "Pakistan", "Dominican_Republic")
@@ -106,8 +112,7 @@ mod_eq <- "log(r) ~ t" |> as.formula()
 fit_reg <- map(.x = data_reg, .f = ~ lm(formula = mod_eq, data = .x))
 
 # We use the `jtools` and `huxtable` R packages to create pretty tables
-library(jtools)
-library(huxtable)
+
 
 # Plot the model results
 export_summs(
@@ -223,7 +228,6 @@ graphics.off()
 # in the second period between November 2002 and March 2021.
 
 # We assume this is the typical period for the second wave.
-library(tidyverse)
 
 data_url <- "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv"
 
